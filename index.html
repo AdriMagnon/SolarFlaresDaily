@@ -1,0 +1,249 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>7-Day Solar Flare History Feed</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            padding: 40px; 
+            background: #121212; 
+            color: #ffffff; 
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #333;
+            padding-bottom: 15px;
+            margin-bottom: 25px;
+        }
+
+        h1 { margin: 0; font-size: 1.8rem; }
+        
+        .status-badge {
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            background: #222;
+        }
+
+        /* Filter styling rules */
+        .filter-controls {
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .filter-controls label {
+            font-size: 0.9rem;
+            color: #aaa;
+        }
+
+        .filter-controls select {
+            background: #1e1e1e;
+            color: #fff;
+            border: 1px solid #333;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            outline: none;
+        }
+
+        .filter-controls select:focus {
+            border-color: #fb8500;
+        }
+
+        /* Feed list structure */
+        .flare-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        /* Individual log card */
+        .flare-card {
+            background: #1e1e1e;
+            border-left: 6px solid #444;
+            border-radius: 4px;
+            padding: 15px 20px;
+            display: grid;
+            grid-template-columns: 1fr 2fr 1fr;
+            align-items: center;
+            gap: 15px;
+            transition: transform 0.2s ease;
+        }
+
+        .flare-card:hover {
+            transform: translateX(4px);
+        }
+
+        /* Severity styling indicators */
+        .flare-card.class-A, .flare-card.class-B { border-color: #4caf50; --accent: #81c784; }
+        .flare-card.class-C { border-color: #ffb703; --accent: #ffb703; }
+        .flare-card.class-M { border-color: #fb8500; --accent: #fb8500; }
+        .flare-card.class-X { border-color: #d32f2f; --accent: #ff6666; }
+
+        .class-badge {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--accent, #fff);
+        }
+
+        .timeline-details {
+            font-size: 0.9rem;
+            color: #ccc;
+            line-height: 1.4;
+        }
+
+        .timeline-details strong {
+            color: #fff;
+        }
+
+        .meta-details {
+            font-size: 0.8rem;
+            color: #777;
+            text-align: right;
+        }
+
+        .no-data-msg {
+            padding: 20px;
+            background: #1e1e1e;
+            border: 1px dashed #333;
+            border-radius: 4px;
+            color: #777;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="header">
+            <h1>7-Day GOES X-Ray Flare History</h1>
+            <div id="status" class="status-badge" style="color: #ffb703;">Connecting to NOAA...</div>
+        </div>
+
+        <!-- Filter selection menu -->
+        <div class="filter-controls">
+            <label for="flare-filter">Filter by Peak Rating:</label>
+            <select id="flare-filter">
+                <option value="M+">M-Class & Above (Default)</option>
+                <option value="ALL">Show All Events</option>
+            </select>
+        </div>
+
+        <!-- This is where all events will populate dynamically -->
+        <div id="flare-feed" class="flare-list"></div>
+    </div>
+
+    <script>
+        // Utilizing your 7-day secondary data link
+        const NOAA_URL = 'https://services.swpc.noaa.gov/json/goes/secondary/xray-flares-7-day.json';
+        let allEvents = []; // Global storage array to preserve data records
+
+        async function fetchSolarHistory() {
+            try {
+                const response = await fetch(NOAA_URL);
+                if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+                
+                const events = await response.json();
+
+                if (!events || events.length === 0) {
+                    document.getElementById('flare-feed').innerHTML = '<div class="no-data-msg">No solar flare events recorded over the last 7 days.</div>';
+                    document.getElementById('status').innerText = "NO DATA";
+                    return;
+                }
+
+                // Reverse the array so the most recent flares appear at the top
+                allEvents = events.reverse();
+
+                // Build initial display applying the default filter value
+                renderList(document.getElementById('flare-filter').value);
+
+            } catch (error) {
+                console.error('Error parsing historical telemetry:', error);
+                document.getElementById('status').innerText = "FETCH FAILED";
+                document.getElementById('status').style.color = "#d32f2f";
+            }
+        }
+
+        function renderList(filterType) {
+            const feedContainer = document.getElementById('flare-feed');
+            feedContainer.innerHTML = ''; // Clear container
+
+            // Filter entries using the peak rating letter (max_class)
+            const displayList = allEvents.filter(flare => {
+                const maxClass = flare.max_class || 'N/A';
+                const classLetter = maxClass.charAt(0).toUpperCase();
+
+                if (filterType === 'M+') {
+                    return classLetter === 'M' || classLetter === 'X';
+                }
+                return true; // Match all entries when select field resolves to 'ALL'
+            });
+
+            if (displayList.length === 0) {
+                feedContainer.innerHTML = '<div class="no-data-msg">No events matching this strength filter over the last 7 days.</div>';
+                document.getElementById('status').innerText = `TOTAL EVENTS: 0`;
+                return;
+            }
+
+            displayList.forEach(flare => {
+                const maxClass = flare.max_class || 'N/A';
+                const currentClass = flare.current_class || 'Ended';
+                
+                // Parse out the base letter for structural CSS styling classes (A, B, C, M, X)
+                const classLetter = maxClass.charAt(0).toUpperCase();
+
+                // Format system ISO timestamps to the visitor's local date/time standard
+                const localDate = new Date(flare.time_tag).toLocaleDateString([], {month: 'short', day: 'numeric'});
+                const localStart = new Date(flare.begin_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                const localPeak = new Date(flare.max_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                const localEnd = flare.end_time ? new Date(flare.end_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Ongoing';
+
+                // Construct HTML Card row dynamically
+                const card = document.createElement('div');
+                card.className = `flare-card class-${classLetter}`;
+                card.innerHTML = `
+                    <div>
+                        <div class="class-badge">${maxClass}</div>
+                        <span style="font-size: 0.75rem; color: #777;">Peak Rating</span>
+                    </div>
+                    <div class="timeline-details">
+                        <strong>Date:</strong> ${localDate}<br>
+                        <strong>Duration:</strong> ${localStart} &rarr; ${localEnd}<br>
+                        <strong>Peak Hit:</strong> ${localPeak}
+                    </div>
+                    <div class="meta-details">
+                        Satellite #${flare.satellite}<br>
+                        Current: ${currentClass}
+                    </div>
+                `;
+                feedContainer.appendChild(card);
+            });
+
+            document.getElementById('status').innerText = `TOTAL EVENTS: ${displayList.length}`;
+            document.getElementById('status').style.color = "#4caf50";
+        }
+
+        // Handle dropdown select updates
+        document.getElementById('flare-filter').addEventListener('change', (event) => {
+            renderList(event.target.value);
+        });
+
+        // Initialize display context immediately
+        fetchSolarHistory();
+    </script>
+</body>
+</html>
